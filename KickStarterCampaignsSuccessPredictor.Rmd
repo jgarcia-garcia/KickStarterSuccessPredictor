@@ -1,0 +1,955 @@
+---
+title: "KickStarter campaigns success predictor"
+author: "Jose Garcia-Garcia"
+date: "14/9/2020"
+output: pdf_document
+references:
+- id: link1
+  title: A Brief History Of Crowdfunding
+  URL: 'https://www.startups.com/library/expert-advice/history-of-crowdfunding'
+  issued:
+    year: 2018
+- id: link2
+  title: Crowdfunding Comte
+  URL: 'http://positivists.org/blog/archives/5959'
+  issued:
+    year: 2016
+- id: link3
+  title: The Statue of Liberty and America's crowdfunding pioneer
+  URL: 'https://www.bbc.com/news/magazine-21932675'
+  issued:
+    year: 2013
+- id: link4
+  title: Progressive-Rock Band Marillion Pioneered Crowdfunding
+  URL: 'https://www.westword.com/music/progressive-rock-band-marillion-pioneered-crowdfunding-8425775'
+  issued:
+    year: 2016
+- id: link5
+  title: Crowdfunding Statistics
+  URL: 'https://blog.fundly.com/crowdfunding-statistics/'
+  issued:
+    year: 2020
+---
+
+```{r setup, include=FALSE, cache=TRUE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+# Introduction and motivation
+Even we could think that crowdfunding is a quite modern concept which started in the XXI century, that is not strictly true. Crowdfunding had indeed been present in the human history since the 1700's. In fact, some example of crowdfunding campaigns during 18th and 19th century are:
+
+* 1700s, The Irish Loan Fund - Established to provide loans to poor but creditworthy people in Dublin, wealthy citizens donated money as a way of charity. This campaign was so successful that by 1834, there were 300 loan funds in Ireland [-@link1]
+
+* 1850s, Auguste Comte - Philosopher and founder of the positivism, turned himself into an independent philosopher whose expenses were funded by the public people following his works [-@link2]
+
+* 1885, Statue of Liberty pedestal - Although the Statue of Liberty was a gift from the French government, additional \$250000 were necessary to build the pedestal. The committee tasked with raising the money fell short by \$100000 and infamous publisher Joseph Pulitzer launched a campaign that raised the required amount from more than 160000 donors [-@link3]
+
+However, it was not until 1997, in the early days of the internet, where the inception of the modern online crowdfunding ocurred. A British rock band called Marillon used a mailing list that had around thousand of fans emails in order to raise money to be able to came to the US in tour. The idea was that fans will put the money into the band bank account and would be returned to them if not enough money was raised [-@link4]. The modern online crowdfunding was born at that moment.
+
+Marillon was succesful and were able to go on tour through the US thanks to that campaign and the brand new online crowdfunding platforms started to emerge in the following years:
+
+* ArtistShare, 2001 - First dedicated crowdfunding platform for musicians that wanted to raise money for recording an album or going on tour
+
+* Indiegogo, 2007 - One of the first, and the most succesful at that time, sites to offer crowdfunding for a large list of categories and not only related to the music business
+
+* Kickstarter, 2009 - The platform that become the leader in the next following years with more than 2 billions raised between 2009 and 2017. In conjunction with Indiegogo, Kickstarter led to an explosion of the crowdfunding platforms
+
+In the following years, lots of new platforms appeared in the market. Some of them being global for all kind of projects like the mentioned Kickstarter or Indiegogo, and others covering different market niches, e.g. Patreon for creative individuals (artists, podcasters, musicians,etc...) or Charitable for charity donations.
+
+![](figs/crowdfunding-logos.png)
+
+During the last decade, crowdfunding has become more and more popular As a consecuence of this popularity and growth in number of platforms, projects and users, North America generates \$17.2 billion each year in crowdfunding, while Asia generates \$10.5 billion each year and Europe \$6.5 billion [-@link5.]
+
+Despite this growth in number of platforms and money raised, Kickstarter remains as number one in all the popularity rankings. As per September 2020, Kickstarter had raised \$5.2 billion. In Kickstarter, 188000 projects had been funded successfully, which is approximately a 37% of the projects.
+
+This raises the question of which are the factors that determine if a fundraising campaign in Kickstarter is going to be successful or is going to fail. Take into account that Kickstarter is an all-or-nothing platform, only the projects that are able to raise at least the goal target are considered successful, as for those which aren't, money is returned to the pledgers.
+
+As a result of this question, **our motivation for this project consists on trying to predict, before starting it, if our campaign is going to be succesful or is going to fail**, hence we will need to modify some features inherent to our campaign, in order to have more chances on accomplish our goal as fundraisers.
+
+\pagebreak
+
+# Project overview
+In order to be able to predict if a Kickstarter campaign is going to be successful, we need some historic data on previous projects.
+
+In Kaggle we can find a dataset with information about 321616 campaigns on Kickstarter from its very first days until January 2018 (https://www.kaggle.com/kemical/kickstarter-projects)
+This dataset is provided by Kaggle user Mickaël Mouillé and is presented in CSV format, hence is quite easy to load and manipulate.
+
+*Note: There are 2 dataset versions in there, one with data until 2016 and the one that we are going to analyze, with data until January 2018.*
+
+```{r echo=FALSE, cache=TRUE, message=FALSE, warning=FALSE}
+# Load required libraries
+# Note: this process could take a couple of minutes
+
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+if(!require(gridExtra)) install.packages("gridExtra", repos = "http://cran.us.r-project.org")
+if(!require(rpart)) install.packages("rpart", repos = "http://cran.us.r-project.org")
+if(!require(rpart.plot)) install.packages("rpart.plot", repos = "http://cran.us.r-project.org")
+if(!require(randomForest)) install.packages("randomForest", repos = "http://cran.us.r-project.org")
+if(!require(ggrepel)) install.packages("ggrepel", repos = "http://cran.us.r-project.org")
+if(!require(scales)) install.packages("scales", repos = "http://cran.us.r-project.org")
+
+
+#----- LOADING DATA FROM EXTERNAL SOURCE -----#
+#Direct download from Kaggle is quite complicated as it needs login and add aditional operations in the script that are not the purpose of this course and project
+#So we have downloaded the CSV file containing latest info available and move it into the data folder in the project
+#Loading the CSV in the way
+ks_projects <- read.csv(file.path("data/ks-projects-201801.csv"), stringsAsFactors=FALSE)
+```
+
+Main information contained in the CSV file, as different columns, that we are going to analyze and use for our prediction model will be:
+
+* Name of the project
+
+* Main category and category features (this last one can be really considered as a kind of sub-category)
+
+* Currency and country of origin of the project
+
+* Launched and deadline dates of the project
+
+* Usd Goal Real, which is the goal for the project expressed in US dollars. External conversion was already included in the CSV and money conversions directly provided by Kickstarter are not reliable.
+
+* State of the project: succesful, failed, canceled, live, suspended, undefined
+
+There are other data/columns included in the dataset but as the purpose of our model is to predict if our project is going to be succesful **before** releasing it, so we will not introduce into our analysis and model:
+
+* Number of backers, as that cannot be find out until our campaign has finished
+
+* Usd Pledged Real, for the same reason, is unknown until our campaign has finished
+
+* Additional data that can be deduced from date information but only after finalizing our campaign, e.g succesful rate for month/year of campaign release
+
+Steps that we are going to follow for analysing the data and fitting a machine learning model that can help us to predict if a campaign is going to be succesful or not are:
+
+1. Clean our dataset, removing all the columns/predictors that are not necessary for sure for our model and additionally, removing inputs that are not helpful
+
+2. Split the dataset into validation dataset (only used for final validation of our choosen model), training and test/cross validation datasets (only used for comparing different possible models and choose the best one)
+
+3. Analyze the rest of remaining predictors and find out if is worthy to include them into our model and/or those predictors need some kind of transformation
+
+4. Train different models/algorithms and decide which is the best one that fits to our problem
+
+5. Present the final results of our model and present, as well, future lines of work in order to improve the accuracy of the model
+
+\pagebreak
+
+# Data analysis
+
+## Cleaning the dataset and data partitions
+As we mentioned in previous chapter, before starting the data analysis, we need to clean our dataset.
+
+As a first step, we are going to remove the columns that are not useful for our prediction and those are:
+
+```{r echo=FALSE, cache=TRUE, results='asis'}
+remove_col_table <- tibble(Column = "Goal", Reason = "Information in USD already contained in another column")
+remove_col_table <- bind_rows(remove_col_table,tibble(Column="Pleged",Reason = "Money raised, only known after project has finished"))
+remove_col_table <- bind_rows(remove_col_table,tibble(Column="Usd Pledged",Reason = "Money raised in USD, only known after project has finished"))
+remove_col_table <- bind_rows(remove_col_table,tibble(Column="Backers",Reason = "Number of donors, only known after project has finished"))
+remove_col_table %>% knitr::kable()
+```
+
+Additionally, we are going to filter the rows in our dataset depending on the final state of the campaign. The reason is that there are some other examples with states that we shouldn't include in our analysis:
+
+* Live - Projects that are still fundraising money, hence we don't know the final state (if they are going to be succesful or not)
+
+* Undefined - Projects where information regarding if they were succesful or not has not been provided
+
+* Canceled - Projects that were canceled by the author for whatever reason. As we cannot figure out if they were going to reach the goal or not, we discard them from our analysis
+
+* Suspended - Projects suspended by Kickstarted because there is some violation of their terms and rules
+
+```{r echo=FALSE, cache=TRUE, message=FALSE, warning=FALSE}
+#----- CLEANING THE DATASET AND CREATE PARTITIONS -----#
+#Now we are going to remove the columns that we are not going to need for sure in our analysis
+ks_projects <- ks_projects %>% select(-goal,-pledged,-backers,-usd.pledged)
+#Goal, pledged and usd.pledged information is already included and ccy conversions fixed in the columns
+#usd_pledged_real and usd_goal_real.
+#Additionally, backers is an output, not a column that can be used as input for the algorithm
+
+#We are interested in predicting if a project is going to be succesful or will fail (1 or 0).
+#So we need to clean the dataset are remove projects canceled, suspended, that are still live or state is not available/undefined
+state_summary <- ks_projects %>% group_by(state) %>% summarize(count=NROW(state))
+#state       count
+#<chr>       <int>
+#  1 canceled    38779
+#2 failed     197719
+#3 live         2799
+#4 successful 133956
+#5 suspended    1846
+#6 undefined    3562
+ks_projects <- ks_projects %>% filter(state %in% c("successful","failed"))
+```
+
+Once we have cleaned our working dataset, we are going to create the different partitions that we need for training our model.
+Before filtering by state we had 378661 rows, and after that filtering we have 331675. 
+
+That amount is not a huge quantity of examples (e.g. in previous projects, like doing a Movie Recommendation System, we had several millions of training examples). 
+
+Taking that into account, we want to keep as maximum examples for training but without compromising a proper validation of the results. So, we have decided to split the dataset into:
+
+* 10% for final validation dataset for evaluating the choosen final model
+
+* 90% of the remaining examples will be used as training examples for different models
+
+* 10% of the remaining examples will be used as test examples for comparing accuracy performance of different models
+
+```{r echo=FALSE, cache=TRUE, message=FALSE, warning=FALSE}
+#Split the dataset into validation, train and test dataset
+#We are going to save a 10% for the validation dataset
+set.seed(1, sample.kind="Rounding")
+# if using R 3.5 or earlier, use `set.seed(1)` instead
+val_index <- createDataPartition(y = ks_projects$state, times = 1, p = 0.1, list = FALSE)
+ks_validation <- ks_projects[val_index,]
+ks_edx <- ks_projects[-val_index,]
+
+#We are going to split the remaining into train and test dataset (90-10%)
+set.seed(13, sample.kind="Rounding")
+# if using R 3.5 or earlier, use `set.seed(13)` instead
+test_index <- createDataPartition(y = ks_edx$state, times = 1, p = 0.1, list = FALSE)
+ks_test <- ks_edx[test_index,]
+ks_train <- ks_edx[-test_index,]
+```
+
+## Success rate per category analysis
+As a first possible factor to take into account in our prediction model, we are going to study if the category election is making any difference in the probabilities for a campaign being succesful.
+
+Our hypothesis consists on considering that there are categories which the public could consider more interesting, hence would have a higher probability of being crowdfunded successfully than others.
+
+In our analysis we will take into account as well the average goal amount required for each category. The purpose is to discard that differences of the sucess rate between categories are due to some projects in some categories (e.g. filming movies) requiring a huge amount of money compared to other "cheaper" projects in other categories (e.g. publishing books).
+
+So, first step consists on calculate the average success rate and average money goal for all the campaigns and use it as a base for compare which categories are more or less successful than the average. The average success rate for our training dataset is 0.404 (40.4%), while the average goal is $40519.
+
+```{r echo=FALSE, cache=TRUE, message=FALSE}
+#Check the mean of succesful projects and the goal average as a base for comparison
+mean_success <- mean(ks_train$state=="successful")
+mean_usd_goal <- mean(ks_train$usd_goal_real)
+```
+
+Now we are going summarize by main category and analyze the success rate vs goal average per each main category.
+
+```{r echo=FALSE, cache=TRUE, results='asis', warning=FALSE}
+#Calculate success rate and goal average per main category
+maincat_summary <- ks_train %>% group_by(main_category) %>% summarize(count=NROW(state),success_rate=mean(state=="successful"),goal_avg=mean(usd_goal_real))
+#15 main categories
+#Plot success rate and average goal by main category
+p1 <- maincat_summary %>% ggplot(aes(x=reorder(main_category, -success_rate),y=success_rate,fill='red')) + geom_col(position = "dodge",show.legend="FALSE") + geom_hline(yintercept = mean_success, linetype = "longdash") +  coord_flip() + xlab("Main categories") + ylab("Success Rate") + ggtitle(label = "KS projects success rate") + theme(plot.title = element_text(hjust = 0.5)) 
+p2 <- maincat_summary %>% ggplot(aes(x=reorder(main_category, goal_avg),y=goal_avg)) + geom_col(position = "dodge",show.legend="FALSE",fill="#56B4E9") + geom_hline(yintercept = mean_usd_goal, linetype = "longdash") +  coord_flip() + xlab("Main categories") + ylab("Goal average") + ggtitle(label = "KS projects goal average") + theme(plot.title = element_text(hjust = 0.5))
+grid.arrange(p1,p2,ncol=2)
+```
+
+If we take a look to the graphs, we can observe that:
+
+* There are important differences in the success rate between different categories. For example, the least succesful category, which is "Technology", has a success rate of 0.237 (23.7%), while the most succesful one, which is "Dance", has a success rate of 0.66 (66%)
+
+* Although we can see some correlation between goal average, main categories and success rate, only for the ones that are at the ends (Technology, Journalism, Dance), for most of them there is no correlation. For example, "Games" is the 6th main category with higher success rate even if it is also one the most "expensive" ones, being 5th in that ranking.
+
+So, from these observations, we can deduce that the main categories information is going to be a good candidate to be a predictor/feature in our model. 
+
+On the other hand, is also possible that goal for each project could be also a good feature to be included in our model. However, we need a further analysis in order to be able to confirm that assumption (will do it in next sections).
+
+Additionally, we are going to analyze if there are big differences for the categories inside each main category. The reason is that if there are important differences, instead of just taking into account for our model the main category, we should include the category breakdown as well.
+
+We are going to select 2 examples of main categories for that analysis, the one with worst success rate (Technology) and one with success rate very close to the average (Film & Video). We are going to summarize success rate per category and also the goal average as well, in order to discard that differences are due to goal objective instead of category itself (as we did with main categories).
+
+```{r echo=FALSE, cache=TRUE, results='asis', warning=FALSE}
+#We are going to check if there are differences in success rate inside the same main category
+#We are picking a couple of main cats for our analysis. For example: the one with worst success rate (Technology) and one in the average (Film & Video)
+filmvideo_cat <- ks_train %>% filter(main_category=="Film & Video") %>% group_by(category) %>% summarize(count=NROW(state),success_rate=mean(state=="successful"),goal_avg=mean(usd_goal_real))
+tech_cat <- ks_train %>% filter(main_category=="Technology") %>% group_by(category) %>% summarize(count=NROW(state),success_rate=mean(state=="successful"),goal_avg=mean(usd_goal_real))
+
+p3 <- filmvideo_cat %>% ggplot(aes(x=reorder(category, -success_rate),y=success_rate,fill='red')) + geom_col(position = "dodge",show.legend="FALSE") +  coord_flip() + xlab("Categories") + ylab("Success Rate") + ggtitle(label = "F&V success breakdown") + theme(plot.title = element_text(hjust = 0.5))
+p4 <- filmvideo_cat %>% ggplot(aes(x=reorder(category, -success_rate),y=goal_avg)) + geom_col(position = "dodge",show.legend="FALSE",fill="#56B4E9") +  coord_flip() + xlab("Categories") + ylab("Goal average") + scale_y_continuous(breaks = c(0,1000000,2000000),labels = comma) + ggtitle(label = "F&V goal avg breakdown") + theme(plot.title = element_text(hjust = 0.5))
+p5 <- tech_cat %>% ggplot(aes(x=reorder(category, -success_rate),y=success_rate,fill='red')) + geom_col(position = "dodge",show.legend="FALSE") +  coord_flip() + xlab("Categories") + ylab("Success Rate") + ggtitle(label = "Technology breakdown") + theme(plot.title = element_text(hjust = 0.5))
+p6 <- tech_cat %>% ggplot(aes(x=reorder(category, -success_rate),y=goal_avg)) + geom_col(position = "dodge",show.legend="FALSE",fill="#56B4E9") +  coord_flip() + xlab("Categories") + ylab("Goal average") + scale_y_continuous(breaks = c(0,200000,400000),labels = comma) + ggtitle(label = "Technology breakdown") + theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange(p3,p4,p5,p6,ncol=2)
+```
+
+In the graphs we can observe that there are big differences between categories inside the same main category and that are not related to the goal objective average for each category. Hence, we can conclude that is worthy to add the categories into our model in conjunction to the main category.
+
+Finally, if we check the number of different categories we will find out that there are 159 different categories but the number raises to 170 if we take into account the main category plus category combination. That means that there are categories which are repeated at least in 2 different main categories.
+
+So, in order to simplify our model and have one only predictor related to the category of the project, we are going to create a new column called *unique_cat*. In that new feature, we are going to join the main category and category for a campaign.
+
+```{r echo=FALSE, cache=TRUE, warning=FALSE, results='asis'}
+#As there are differences inside categories of same main_category, we are going to take those subcategories into account
+#Explore categories
+cat_summary <- ks_train %>% group_by(category) %>% summarize(count=NROW(state),success_rate=mean(state=="successful"))
+#159 categories if we group only by category
+cat_summary <- ks_train %>% group_by(category,main_category) %>% summarize(count=NROW(state),success_rate=mean(state=="successful"))
+#170 categories if we group by category and main_category
+#That means that there some categories included in different main categories
+#So we are going to create a new column with a unique category key: main_category|category
+ks_train <- ks_train %>% mutate(unique_cat=str_c(main_category,category,sep="|"))
+
+unique_cat_summary <- ks_train %>% group_by(unique_cat) %>% summarize(ucat_success_rate=mean(state=="successful")) 
+
+knitr::kable(head(ks_train %>% select(ID,category,main_category,unique_cat)),caption="Examples of main cat and category features joined into unique cat feature")
+```
+
+## Funding goal and campaign duration analysis
+We are now going to focus on studying if there is some kind of correlation between the funding goal that a campaign need to raise and the probability of success for that campaign.
+
+In order to study that funding goal effect, we are going to plot the goal vs the succes rate through an histogram. However, we need first to do a preliminar analysis in order to find the best way to visualize this data.
+
+So, as a first step, we need to find the median, maximum and minimum funding goals in our training dataset:
+
+* median goal is $5000
+
+* maximum goal is $151395870
+
+* minimum goal is $0.49
+
+We can observe that there is a huge difference between the maximum and the minimum, while the mean was around \$40000 and the median is \$5000. This is going to represent a problem when creating a proper histogram that can be easily interpreted. 
+
+In fact, 97% of our training samples have a goal between 0 and $100000, so we will use that limit in order to plot our histogram, and will be a valid approximation of the whole population for our purpose.
+
+
+```{r echo=FALSE, cache=TRUE, results='asis', warning=FALSE}
+#We are going to focus now on exploring the goal target feature throgh an histogram
+#Calculate the max and min and median value, mean already calculated
+#mean -> 40519.6814085
+median_goal_target <- median(ks_train$usd_goal_real)
+#5000
+max_goal_target <- max(ks_train$usd_goal_real)
+#151395869.92
+min_goal_target <- min(ks_train$usd_goal_real)
+#0.49
+
+#There is a huge difference between the min and max, while the mean is around 40k and the median 5k
+#So probably most of the goal targets amounts are between 0 and 80-100k
+aux <- mean(between(ks_train$usd_goal_real,0,100000))
+#0.9704157
+
+#We are going to use then 100000 as the goal amount higher limit for our histogram
+#If we use 150k million as the higher limit, the visualization is going to be very poor
+#Doing an histogram showing the projects that were successful/uncessful depending on goal target
+p7 <- ks_train %>% filter(between(usd_goal_real,0,100000)) %>% ggplot(aes(x=usd_goal_real, fill=state, color=state)) + geom_histogram(position="identity", alpha=0.5, bins = 50) + xlab("Goal (USD)") + ylab("Count") + ggtitle(label = "Successful vs Failed Projects per Goal amounts")
+p7
+#For lower goals (0-4000) the success rate is quite high and start to decrease as long as the goal increases
+```
+
+For lower goals, up to \$4000, the success rate is quite high compared to the average and even the number of succesful campaigns is higher than the number of failed projects for goals up to \$2000. Additionally, we can also observe that there is an important percentage of the total number of projects with a funding goal under \$6000.
+
+Now we are going to calculate the number of days that the campaign was open for donations and check if this feature has some effect in the success rate.
+
+As a first step for this analysis, we are going to create a new "days period" column in our dataset. That new feature will represent the days that the campaign was open. We calculate that new feature substracting the deadline from the launched date.
+
+```{r echo=FALSE, cache=TRUE, results='asis', warning=FALSE}
+#Analyze if the time the fundraising time has some influence over the success
+#Need to calculate first how much time fundraising was opened
+#Add a new column with the days
+#Both columns are of type character, need to transform them into dates and calculate day difference
+ks_train <- ks_train %>% mutate(deadline=as.Date(deadline),launched=as.Date(launched),days_period=difftime(deadline, launched, units = "day"))
+knitr::kable(head(ks_train %>% select(ID,launched,deadline,days_period)))
+```
+
+Now that we have a feature with the duration of the fundraising campaign, expressed in number of days, we are going to plot the success rate vs duration of the campaign and analyze if there is some kind of correlation between both of them.
+
+```{r echo=FALSE, cache=TRUE, results='asis', warning=FALSE}
+days_success_rate <- ks_train %>% group_by(days_period) %>% summarize(success_rate=mean(state=="successful"))
+p8 <- days_success_rate %>% ggplot(aes(as.integer(days_period),success_rate))+ geom_point(color='blue') + geom_smooth(method='gam') + xlab("Duration of fund raising (days)") + ylab("Success rate") + ggtitle("Success rate per duration of fund raising (days)") + theme(plot.title = element_text(hjust = 0.5))
+suppressMessages(print(p8)) 
+#Not concluding: Success rate increases from 0 to 15, then decreases from 15 to 55, increases from 55 to 72 and decreases from there
+```
+
+As we can see in the plot, the slope for the success rate is raising from 0 to 15 days, then decreasing from 15 to 55 days, increasing again from 55 to 72 days and decreasing from then again. So, there is some kind of correlation, but is clear that is not linear and not easy to quantify.
+
+On the other hand, it could be interesting to study as well the relationship between duration, funding goal and success probabilities for a campaign. The reasonsing behind the decision to study that relationship is that, for example, should be easier to raise \$5000 in 10 days, than \$3000 in just 2 days, even is a bigger amount of money the ratio usd per day is lower (\$500 per day vs \$1500 per day in the second case).
+
+```{r echo=FALSE, cache=TRUE, results='asis', warning=FALSE}
+#Study the effect of the goal_amount/days ratio. We are rounding to the nearest 100 to facilitate the visualization
+#In order to better visualization, we are also filtering by total goal = 100000 (which includes 97% of the population)
+goal_days_ratio_success <- ks_train %>% filter(between(usd_goal_real,0,100000)) %>% mutate(goal_days_ratio=round(usd_goal_real/as.integer(days_period),digits=-2)) %>% select(goal_days_ratio,state)
+goal_days_ratio_success <- goal_days_ratio_success %>% group_by(goal_days_ratio) %>% summarize(success_rate=mean(state=="successful"),count=NROW(state))
+
+#To improve visualization, we need to filter as well by goal days ratio
+#Check % of samples we are taking into account
+aux1 <- sum(goal_days_ratio_success$count)
+aux2 <- goal_days_ratio_success %>% filter(between(goal_days_ratio,0,4000))
+aux3 <- sum(aux2$count)
+#aux3 / aux1
+#Covering 99.88% of rest of the population
+
+p9 <- goal_days_ratio_success %>% filter(between(goal_days_ratio,0,4000)) %>% ggplot(aes(goal_days_ratio,success_rate))+ geom_point(color='blue') + geom_smooth(method='gam') + xlab("Goal per day ratio (Rounded to 100s, USD)") + ylab("Success rate") + ggtitle("Success rate per goal/day ratio") + theme(plot.title = element_text(hjust = 0.5))
+suppressMessages(print(p9)) 
+#In this case, is quite clear that the goal/day ratio is quite important
+#So is going to be an important feature in our model, let's add it
+ks_train <- ks_train %>% mutate(goal_day_ratio=usd_goal_real/as.integer(days_period))
+```
+
+*Note: In order to improve visualization, we have filtered those campaigns with a fundraising goal bigger than \$100000 and those with a goal per day higher than \$4000. In any case, we are still covering 97% of our training dataset population in our graph.*
+
+After analyzing this goal per day ratio, we can observe a clear tendency in the graph: the probability of success of our campaign will descend logarithmically a long as our goal per day ratio increases. As it seems it could be an importante feature for our prediction model, we are going to include it as a new column in our dataset.
+
+## Currency and country analysis
+In Kickstarter, project creation is available to individuals in the US, UK, Canada, Australia, New Zealand, the Netherlands, Denmark, Ireland, Norway, Sweden, Germany, France, Spain, Italy, Austria, Belgium, Switzerland, Luxembourg, Hong Kong, Singapore, Mexico, and Japan.
+
+So, we are going to study if the project location could have some relationship with the probabilites for the campaign to be succesful. In order to do that, we need to summarize the success rate per country and currency and check if there are differences between countries and/or different currencies.
+
+```{r echo=FALSE, cache=TRUE, results='asis', warning=FALSE}
+#Analyze now the country and currency columns: check the average success rate and number of projects per country
+#For country
+ks_country <- ks_train %>% group_by(country) %>% summarize(success_rate=mean(state=="successful"),count=NROW(state))
+#There is a code country "N,0" which seems to be some kind of error in the original data
+#There are 165 entries in our train set for that one, we are changing it to "UN" (Unknown)
+ks_train$country[ks_train$country == "N,0\""] <- "UN"
+ks_country <- ks_train %>% group_by(country) %>% summarize(success_rate=mean(state=="successful"),count=NROW(state))
+
+p11 <- ks_country %>% ggplot(aes(x=reorder(country, -success_rate),y=success_rate,fill=country)) + geom_col(position = "dodge",show.legend="FALSE") + geom_hline(yintercept = mean_success, linetype = "longdash") +  coord_flip() + xlab("Countries") + ylab("Success Rate") + ggtitle(label = "Success rate per country") + theme(plot.title = element_text(hjust = 0.5))
+
+#For currency
+ks_currency <- ks_train %>% group_by(currency) %>% summarize(success_rate=mean(state=="successful"),count=NROW(state))
+p12 <- ks_currency %>% ggplot(aes(x=reorder(currency, -success_rate),y=success_rate,fill=currency)) + geom_col(position = "dodge",show.legend="FALSE") + geom_hline(yintercept = mean_success, linetype = "longdash") +  coord_flip() + xlab("Currencies") + ylab("Success Rate") + ggtitle(label = "Success rate per currency") + theme(plot.title = element_text(hjust = 0.5))
+grid.arrange(p11,p12,ncol=2)
+
+#Success rate is almost the same for a country and its currency
+#The only remarkable differences are for countries in the EURO area, which share a common currency
+#So we can discard currency as a feature if we use the country
+```
+
+*Note: There is a country code (N,0) which seems to be some kind of error in the original data. There are 165 entries in our training dataset for that one, that we are going to change to Unknown (UN).*
+
+As we can observe, success rate is almost the same for a country and its currency. The only remarkable differences are for countries in the EURO area, which share a common currency. So we can discard currency as a feature if we have selected the country as well.
+
+Regarding the country effect, is clear that there are big differences in the project success rate between different countries, so it's a good candidate to be included as a feature in our prediction model.
+
+## Title length analysis
+As a final feature to be analyzed, we are going to study if the lenght of the title for a project has some kind of relationship with the probability of success for that project.
+
+Our hypothesis is that if the title of the project has some kind of very brief explanation related to the purpose of that project, backers are going to be more interested on it and there is a bigger probability that they will fund it.
+
+```{r echo=FALSE, cache=TRUE, results='asis', warning=FALSE}
+#Now we are going to analyze the Title column
+#1st we will analyze if the length of the title has some influence over the success rate
+#Hypothesis: A project title with some explanation included may have higher success rates
+ks_titlewords <- ks_train %>% mutate(title_words=str_count(name," ")+1) %>% group_by(title_words) %>% summarize(success_rate=mean(state=="successful"),count=NROW(state))
+p13 <- ks_titlewords %>% ggplot(aes(title_words,success_rate))+ geom_point(color='blue') + xlab("Number of words in title") + geom_smooth(method='loess') + ylab("Success rate") + ggtitle("Success rate vs number of words in title") + scale_x_continuous(limit=c(0,17)) +theme(plot.title = element_text(hjust = 0.5))
+suppressMessages(print(p13)) 
+#For visualization purposes, only shown until 17 words. That's 99.9999% of population in the train set
+#We can observe that success rate increases from 1 word and 0.30 up to 0.45-0.47 from 6 to 14 words, and then starts decreasing
+#Add word count into the ks_train dataset
+ks_train <- ks_train %>% mutate(title_words=str_count(name," ")+1)
+```
+
+*Note: For better visualization purposes, only shown until 17 words. That corresponds to 99.9% of population in the training dataset.*
+
+As we can observe in our graph, when the title length is between 5 and 15 words, the success rate is higher than the average, with a maximum when title length is 9 words. However, when the length is lower than 5 or higher than 15, the probability of the project being succesful decreases quite quickly.
+
+Hence we could think in including the title length as well as a feature into our model. We are going to include a new column into our dataset with the number of words that are in the title length.
+
+\pagebreak
+
+# Model selection
+
+## Logistic regression
+One of the most simple, easy to understand and probably most used supervised machine learning algorithms is the linear regression algorithm. In fact, in any introduction course to machine learning algorithms is the first one to be taught.
+
+Linear regression is a suitable algorithm when the expecte output is a continuos variable. However, our problem is a classification one, where there are 2 possible output classes: 1 (succesful campaign) or 0 (failed campaign).
+
+For those cases, we should use logistic regression instead of linear regression. Logistic regression is an extension of the linear regression algorithm using logistic transformation:
+
+$$g(p) = log\frac{p}{1 - p}$$
+where conditional probability has been modeled as:
+
+$$g\{Pr(Y=1|X=x)\} = \beta_{0} + \beta_{1}x_{1} + ... + \beta{n}x_{n}$$
+
+Logistic regression algorithm will always return a value between 0 and 1. That will be the probability for a project for being succesful, and we will transform it in the following way:
+
+* if probability p > 0.5, then we will predict the project as succesful (1)
+
+* if probability p $\leq$ 0.5, then we will predict the project as failed (0)
+
+
+Before start training our logistic regression model, we need to do some additional transformations in our dataset:
+
+* transform the *success* column into a numeric, 1 for successful project and 0 for failed
+
+* transform the days column into a numeric
+
+* do the same transformations that we did in previos sections to the cross validation dataset as well
+
+```{r echo=FALSE, cache=TRUE, warning=FALSE}
+#----- 1st ALG. TO STUDY: LOGISTIC LINEAR REGRESSION -----#
+#Need to change the expected output to 1 (sucessful) or 0 (failed)
+ks_train <- ks_train %>% mutate(success=as.numeric(state=='successful'))
+ks_test <- ks_test %>% mutate(success=as.numeric(state=='successful'))
+
+#Add needed columns to test dataset as well
+ks_test$country[ks_test$country == "N,0\""] <- "UN"
+ks_test <- ks_test %>% mutate(unique_cat=str_c(main_category,category,sep="|"))
+ks_test <- ks_test %>% mutate(deadline=as.Date(deadline),launched=as.Date(launched),days_period=difftime(deadline, launched, units = "day"))
+ks_test <- ks_test %>% mutate(goal_day_ratio=usd_goal_real/as.integer(days_period))
+ks_test <- ks_test %>% mutate(title_words=str_count(name," ")+1)
+
+#Convert days_period into numeric
+ks_train <- ks_train %>% mutate(days_period=as.integer(days_period))
+ks_test <- ks_test %>% mutate(days_period=as.integer(days_period))
+```
+
+We are going to execute different iterations of the logistic regression algorithm with different features in order to find out which one fits best.
+
+In our first iteration, the most simple one, we are going to use as features only the ones that are not factors: goal per day ratio, days of duration of the campaign and words in the title. After using those features, we get an accuracy of 61.64% in our predictions.
+
+```{r echo=FALSE, cache=TRUE, warning=FALSE}
+#1st Iteration - Use non-factor features: days_period,goal_day_ratio,title_words
+glm_fit1 <- ks_train %>% glm(success~days_period+goal_day_ratio+title_words,data=.,family="binomial")
+p_hat1 <- predict(glm_fit1,newdata = ks_test,type='response')
+y_hat1 <- ifelse(p_hat1 > 0.5,1,0)
+ac1 <- mean(ks_test$success==y_hat1)
+#0.6164618 
+```
+
+For the second iteration, we are going to include the 2 features expressed as factors as well, those are the unique category key that we created and the country. The accuracy for our predictions has improved to 67.39%. 
+
+However, the execution time has increased exponentially as the R implementation of the algorithm is transforming each different factor in a feature into a new feature with possible value 1 or 0:
+
+* unique category feature is transformed into 170 new features (1 for each different possible unique category)
+
+* country feature is transformed into 23 new features (1 for each different country)
+
+
+```{r echo=FALSE, cache=TRUE, results='asis', warning=FALSE}
+#2nd Iteration - Add factors as well: country, unique_cat
+glm_fit2 <- ks_train %>% glm(success~days_period+goal_day_ratio+title_words+unique_cat+country,data=.,family="binomial")
+p_hat2 <- predict(glm_fit2,newdata = ks_test,type='response')
+y_hat2 <- ifelse(p_hat2 > 0.5,1,0)
+ac2 <- mean(ks_test$success==y_hat2)
+#0.6739138 -> Improved but is still poor
+
+knitr::kable(head(glm_fit2$coefficients),caption="Six first coefficients for the logistic regression model. Note that is creating a different one for each category")
+#"New" features created by algorithm, each category (170) is a feature with value 1 or 0
+#Same for the country. That is common when using factors.
+```
+
+So, as a third iteration, in order to improve the performance of the algorithm and be able to interpret the coefficients easily, we are going to try to represent the category and country effect in a different way. We will try to represent them through their average success rate, so instead of factors they become a numeric feature.
+
+```{r echo=FALSE, cache=TRUE, warning=FALSE, results='asis'}
+#3rd Iteration - Represent category and country through their avg success rate
+ks_train <- ks_train %>% left_join(unique_cat_summary,by="unique_cat")
+ks_test <- ks_test %>% left_join(unique_cat_summary,by="unique_cat")
+ks_country <- ks_country %>% mutate(cty_success_rate=success_rate) %>% select(-success_rate,-count)
+ks_train <- ks_train %>% left_join(ks_country,by="country")
+ks_test <- ks_test %>% left_join(ks_country,by="country")
+
+knitr::kable(head(ks_train %>% select(ID,unique_cat,ucat_success_rate,country,cty_success_rate)),caption="Examples of our new features: success rate per unique category and country")
+
+glm_fit3 <- ks_train %>% glm(success~days_period+goal_day_ratio+title_words+ucat_success_rate+cty_success_rate,data=.,family="binomial")
+p_hat3 <- predict(glm_fit3,newdata = ks_test,type='response')
+y_hat3 <- ifelse(p_hat3 > 0.5,1,0)
+ac3 <- mean(ks_test$success==y_hat3)
+#0.6701618 -> Practically same result as previous one but easier to understand
+#the coefficients
+```
+
+Now the algorithm is quite faster compared to the second iteration of our model (where we were using the factors directly), coefficients easier to interpret and the accuracy is almost the same: 67.01%
+
+As we can see, using linear equations to model the effect of our features has some limitations. If we observe the relationships between features and success rate presented in the previous data analysis, we can see that this relationship is not linear in most of the cases.
+
+As a fourth iteration, we are going to include higher order terms into our model trying to achieve a better accuracy, even if that means that more computational time is required. We are going to introduce second order terms into our model.
+
+However, as we have examples where features present huge values (e.g. \$11.6 million for the goal per day ratio) and same or other features with tiny values (e.g. \$0.012 for same goal per day ratio feature), the algorithm is failing to converge. Hence, it is not returning any valid value, as we can see in the following warning thrown by R studio when executing the model:
+
+```{r echo=FALSE, cache=TRUE, warning=TRUE}
+#There are limitations. We are using a linear models and relationships between
+#features and the output are not linear
+#If we try to add second order terms into the equation. Example:
+glm_fit4 <- ks_train %>% glm(success~days_period+I(days_period^2)+goal_day_ratio+I(goal_day_ratio^2)+title_words+(title_words^2),data=.,family="binomial",maxit = 100)
+#glm_fit4 <- ks_train %>% glm(success~days_period+I(days_period^2)+goal_day_ratio+I(goal_day_ratio^2)+title_words+(title_words^2),data=.,family="binomial",maxit = 1000)
+#Even increasing the number of maximum iterations, it didn't converge and accuracy is even worst
+```
+
+That is happening even if we increase the number of max iterations for the underlying optimization algorithm using the *maxiter* parameter.
+
+In order to avoid this problem, we are going to scale our features. So, for example, all of them will have a value between 0 and 1:
+
+* unique category success rate and country success rate already between 0 and 1, no resize required
+
+* for duration of the campaign in days, we just need to divide by the maximum number of days, which is 92
+
+* for number of words in the title, divide by the maximum number of words, which is 33
+
+* for the goal per day ratio, we need to complicate it a little bit, as the maximum of $11.6 million is to high to use because most of the population will be 0 after changing the scale. In this case, we are going to:
+
+  + consider \$5000 as the maximum possible value (covering 98.3% of population) and assigning that value to higher goal per day ratios (only 1.7%)
+  
+  + now divide all the examples by that new goal ratio maximum
+
+```{r echo=FALSE, cache=TRUE, warning=FALSE}
+#Feature scaling - There are convergency problems because there are features with very high values
+#Let's scale the features so the values are between 0 and 1 approx
+#First, period while fund raising is opened
+max_period <- max(ks_train$days_period)
+#92
+ks_train <- ks_train %>% mutate(period_scaled=as.integer(days_period)/max_period)
+ks_test <- ks_test %>% mutate(period_scaled=as.integer(days_period)/max_period)
+
+#Second, words in the title
+max_words <- max(ks_train$title_words)
+#33
+ks_train <- ks_train %>% mutate(words_scaled=title_words/max_words)
+ks_test <- ks_test %>% mutate(words_scaled=title_words/max_words)
+
+#Third, work with goal ratio
+max_ratio <- max(ks_train$goal_day_ratio)
+#11645836, too high. If we use it to scale, a lot of the population is going to be very close to 0
+#mean(ks_train$goal_day_ratio<=5000)
+#0.9825. With 5000 as maximum we are covering 98.3% of the population.
+#Let's use it as max in order to avoid that almost all the population is 0
+#For the rest of ratios bigger than 5000, we are going to scale it to the new maximum = 1
+ks_train <- ks_train %>% mutate(ratio_scaled=goal_day_ratio/5000)
+ks_test <- ks_test %>% mutate(ratio_scaled=goal_day_ratio/5000)
+ks_train$ratio_scaled[ks_train$ratio_scaled>1] <- 1
+ks_test$ratio_scaled[ks_test$ratio_scaled>1] <- 1
+```
+
+```{r echo=FALSE, cache=TRUE, warning=FALSE, results='asis'}
+knitr::kable(head(ks_train %>% select(ID,days_period,period_scaled,title_words,words_scaled,goal_day_ratio,ratio_scaled)),caption="Examples of scaled features: duration of campaign, words in title and goal per day ratio")
+```
+
+```{r echo=FALSE, cache=TRUE, warning=FALSE}
+# Using 2nd order polynom, including inference between features
+glm_fit5 <- ks_train %>% glm(success~poly(period_scaled,ratio_scaled,words_scaled,ucat_success_rate,cty_success_rate,degree = 2),data=.,family="binomial",maxit = 1000)
+p_hat5 <- predict(glm_fit5,newdata = ks_test,type='response')
+y_hat5 <- ifelse(p_hat5 > 0.5,1,0)
+ac5 <- mean(ks_test$success==y_hat5)
+#0.6748
+
+#Full 3rd order polynom, including inference between features
+glm_fit6 <- ks_train %>% glm(success~poly(period_scaled,ratio_scaled,words_scaled,ucat_success_rate,cty_success_rate,degree = 3),data=.,family="binomial",maxit = 1000)
+p_hat6 <- predict(glm_fit6,newdata = ks_test,type='response')
+y_hat6 <- ifelse(p_hat6 > 0.5,1,0)
+ac6 <- mean(ks_test$success==y_hat6)
+#0.6757 - It seems to be this is the limit of using logistic regression
+#and higher order polynoms
+```
+
+Now, if we try to use higher order polynoms, also including inference between different features, the algorithm not only is converging but also doing it quite quickly. The accuracy results are now:
+
+* 0.6748, using 2nd order polynoms
+
+* 0.6757, using 3rd order polynoms
+
+As we can observe, we have reached the accuracy limit that we can achieve using logistic regression and higher order polynoms. We are going to experiment now with other algorithms in order to find one with better accuracy.
+
+```{r echo=FALSE, cache=TRUE, results='asis'}
+glm_summary <- tibble(Features = "Only non-factor", Accuracy = ac1)
+glm_summary <- bind_rows(glm_summary,tibble(Features="Including factors",Accuracy = ac2))
+glm_summary <- bind_rows(glm_summary,tibble(Features="Factor as numeric",Accuracy = ac3))
+glm_summary <- bind_rows(glm_summary,tibble(Features="Scaled and 2nd order",Accuracy = ac5))
+glm_summary <- bind_rows(glm_summary,tibble(Features="Scaled and 3rd order",Accuracy = ac6))
+glm_summary %>% knitr::kable(caption="Accuracy for logistic regression using different features and orders")
+```
+
+## K-Nearest Neighbours
+There are a big number of machine learning algorithms that are based on measuring distances between different observations. If we think in Euclidean distance as the ordinary distance between 2 points, we can describe this distance with the formula:
+
+$$ dist(P1,P2) = \sqrt{\sum_{j=1}^{n}(x_{1,j}-x_{2,j})^{2}} $$
+
+where:
+
+* $P1$ and $P2$ are point/example 1 and point/example 2
+
+* $x_{1,j}$ and $x_{2,j}$ are values of feature *j* for example 1 and example 2
+
+
+Those algorithms are based on the principle that as closer are those observations, closer (or very similar) is supposed to be the output value for both of them.
+
+For example, in our case, if we have 2 observations with same country, category, title length and a small difference in the goal per day ratio, the distance will be quite small. Hence, we should expect that both of them share same result (both are succesful or failed).
+
+In particular, we are going to use the Knn algorithm (K nearest neighbours) which makes an estimate/prediction for a given sample looking for the k nearest neighbours and computing the average of the output for those neighbours.
+
+Hence, for example, if we want to predict if a given project is going to be succesful or not, and we have set k equals to 100, the algorithm:
+
+* will look for the 100 nearest examples in our training set
+
+* will calculate the average of the outputs for those 100 examples. I.e.if 80 of them are succesful projects and 20 are failed project, the algorith will predict that our project will be succesful with a probability of the 80%
+
+Before starting to train our algorithm, we should notice that we should use the scaled values for this kind of algorithms. That way we will keep the value of our predictors between 0 and 1.
+
+The main reason is that if we use a feature which an absolute value much higher than others, that feature will become much more important when calculating distances than the others.
+
+As a first iteration, we are going to train our algorithm with a fixed value of k equals to 100 and we will try to use scaled and non-scaled features in order to compare the difference in the accuracy.
+
+So, if we try to train our knn algorithm with value k = 100, we will get an accuracy of:
+
+* 0.6466 (64.66%) using as features duration of the campaign in days, goal per day ratio, words in title, unique category success rate and country rate
+
+* 0.6768 (67.68%) using scaled features for duration, goal and words in title plus unique category and country rate which were already between 0 and 1
+
+As expected, the accuracy is higher when we use the scaled version of some features.
+
+```{r echo=FALSE, cache=TRUE, warning=FALSE}
+#As knn is measuring distances between points, we should use the scaled features
+#If not, distance betweens points that have same period, category, country, etc 
+#but very diff goal are going to be far far away compare to those ones with same
+#goal but very diff period + category + country
+
+#For knn, y (success in our case), must be a factor
+ks_train <- ks_train %>% mutate(success_factor=as.factor(success))
+ks_test <- ks_test %>% mutate(success_factor=as.factor(success))
+
+#Show that with non-scaled features, the algorithm is worst
+knn_fit0 <- knn3(success_factor~days_period+goal_day_ratio+title_words+ucat_success_rate+cty_success_rate,data=ks_train,k=100)
+y_hat_knn0 <- predict(knn_fit0,newdata = ks_test,type='class')
+acknn0 <-mean(ks_test$success_factor==y_hat_knn0)
+#0.6466
+
+knn_fit1 <- knn3(success_factor~period_scaled+ratio_scaled+words_scaled+ucat_success_rate+cty_success_rate,data=ks_train,k=100)
+y_hat_knn1 <- predict(knn_fit1,newdata = ks_test,type='class')
+acknn1 <- mean(ks_test$success_factor==y_hat_knn1)
+#0.6768 - Scaling is important, specially for those predictions with a very high value in the goal ratio
+```
+
+As a second iteration, we are now going to look for the optimum parameters we can tune our algorithm in order to get the most accurate model for our problem.
+
+If we take a look to the model, we can see that the tunning parameter for our model will be the k one (number of neighbours to take into account). We will make use of the *caret* package in R, that will help us to find this optimum k.
+
+In the *train* function of the *caret* package, we will use k-fold crossvalidation, setting the control parameter to execute 5 iterations for each value of *k* using a 80% of the dataset as training dataset and 20% as testing one in each of those executions.
+
+Additionally, we will set the *tuneGrid* parameter with a possible value of *k* between 25 and 150 in steps of 25 (25,50,75,100,125,150).
+
+```{r echo=FALSE, cache=TRUE, warning=FALSE}
+#Find the optimum k: use caret package for tunning parameters
+#We are using k-fold crossvalidation, for each k 5 executions with different 80% of the dataset
+#being use as train data and 20% as test data -> This will provide the best k
+#modelLookup("knn")
+control <- trainControl(method = "cv", number = 5, p = .8)
+knn_cv <- train(success_factor~period_scaled+ratio_scaled+words_scaled+ucat_success_rate+cty_success_rate, method = "knn", 
+                      data = ks_train,
+                      tuneGrid = data.frame(k = seq(25, 150, 25)),
+                      trControl = control)
+#Optimized k found: 125
+k = knn_cv$bestTune$k
+
+#Calculate now the accuracy with the model using our test set
+y_hat_knn2 <- predict(knn_cv,newdata = ks_test,type='raw')
+acknn1 <- mean(ks_test$success_factor==y_hat_knn2)
+#0.6769 - Just a little bit better with k=125 than k=100
+```
+
+
+```{r echo=FALSE, cache=TRUE, results='asis', warning=FALSE}
+ggplot(knn_cv, highlight = TRUE)
+```
+
+As we can observe, we get the maximum accuracy with a k value of 125, being that accuracy for predicting our test dataset of 0.6769 (67.69%)
+
+If we compare with the previous algorithm (logistic regression), we can see that there is no so much improvement in the accuracy of our predictions. We are going to try to explain it analyzing some graphs showing success output versus some pairs of features. As we cannot visualize a 5D graph (including all of the features together) we are going to show the success output for some pairs of features and extrapolate our analysis for the 5 of them together.
+
+```{r echo=FALSE, cache=TRUE, results='asis', warning=FALSE}
+knn_plot1 <- ks_train %>% ggplot() + aes(x=ucat_success_rate,y=ratio_scaled,col=success_factor) + geom_point(size=1) + xlab("Category Success Rate") + ylab("Goal ratio scaled") + scale_color_discrete(name="Success")
+knn_plot2 <- ks_train %>% ggplot() + aes(x=cty_success_rate,y=period_scaled,col=success_factor) + geom_point(size=1) + xlab("Country Success Rate") + ylab("Duration scaled") + scale_color_discrete(name="Success")
+knn_plot3 <- ks_train %>% ggplot() + aes(x=ratio_scaled,y=words_scaled,col=success_factor) + geom_point(size=1) + xlab("Goal ratio scaled") + ylab("Words in title scaled") + scale_color_discrete(name="Success")
+knn_plot4 <- ks_train %>% ggplot() + aes(x=ucat_success_rate,y=cty_success_rate,col=success_factor) + geom_point(size=1) + xlab("Category Success Rate") + ylab("Country Success Rate") + scale_color_discrete(name="Success")
+grid.arrange(knn_plot1,knn_plot2,knn_plot3,knn_plot4,ncol=2)
+```
+
+So, as we can see, it's quite difficult to discern clear clusters of successful and non-succesful projects with these predictors. There is a lot of randomness and variability. Hence it's quite difficult to predict if a project is going to be succesful or not just observing the output status of its nearest neighbours.
+
+## Classification trees and random forests
+Classification and regression trees are algorithms based on creating a flow chart of yes or no questions. When the outcome is continous is called regression tree and, as in our case, when the outcome is categorical is called classification/decision tree.
+
+In classification trees, we predict the output variable by partitioning the predictors. Predictions are done by calculating most common class in the training dataset within the partition.
+
+As a first iteration for this model, we are going to create our classification tree with default parameters. As we can observe in representation of the tree shown below, classification trees are quite easy to visualize and easily interpretable.
+
+```{r echo=FALSE, cache=TRUE, results='asis', warning=FALSE}
+#We are going to define a classification tree with default parameters
+fit_tree1 <- rpart(success_factor~period_scaled+ratio_scaled+words_scaled+ucat_success_rate+cty_success_rate, data = ks_train)
+rpart.plot(fit_tree1)
+y_hat_tree1 <- predict(fit_tree1,newdata = ks_test, type = "class")
+tree_acc1 <- mean(ks_test$success_factor==y_hat_tree1)
+#0.6595759 - That simple classification tree is easier to understand
+```
+
+In fact, from that tree we can easily take decissions and predict if our campaign is going to be successful or not:
+
+* if we select a category for a project with success rate less than 0.44, then is not going to be successful
+
+* if our category success rate is higher than 0.44 but goal per day ratio scaled is equal or higher to 0.13, then is going to fail as well
+
+* if category success rate is higher than 0.44, goal per day ratio scaled less than 0.13 but duration of campaign in day scaled is going to be bigger or equal to 0.48, then is going to fail as well
+
+* in any other case, we are going to predict that our project is going to be succesful
+
+However, although is quite simple and nice to visualize and interprete, the accuracy is quite low compared to other algorithms. For example, if we use our test dataset to calculate the accuracy, we get 0.6595 (around 66%), which is lower than we obtained with logistic regression or k-neareast neighbours model.
+
+Now are going to use the *caret* package again in order to train our classification tree with optimized parameters thus we can achieve a better accuracy. 
+
+If we take a look to the model, we can see that the tunning parameter for our model will be the *cp* (complexity parameter). The complexity parameter is the minimum improvement in the model needed at each node. The cp value is a stopping parameter. It helps speed up the search for splits because it can identify splits that don’t meet this criteria and prune them before going too far.
+
+```{r echo=FALSE, cache=TRUE, results='asis', warning=FALSE}
+#Use cross validation to find a better model
+#modelLookup("rpart")
+#Parameter to be optimized: cp = Complexity Parameter
+train_rpart <- train(success_factor~period_scaled+ratio_scaled+words_scaled+ucat_success_rate+cty_success_rate,
+                     method = "rpart",
+                     tuneGrid = data.frame(cp = seq(0.001, 0.02, len = 20)),
+                     data = ks_train)
+plot(train_rpart)
+#Best with cp=0.001
+y_hat_rpart <- predict(train_rpart,newdata = ks_test, type = "raw")
+tree_acc <- mean(ks_test$success_factor==y_hat_rpart)
+#Better result: 0.677866
+```
+
+In this case, the best result that we can get is when the *cp* value is 0.001, and we are getting an accuracy of 0.6778(67.78%) for our test dataset when applying the optimized model. However, on the other hand, the tree becomes more complex thus is more complicated to interpret. In our case, the number of nodes has increased considerably and is a little bit more complicated to predict if our campaign is going to be succesful or not than it was in the previous tree.
+
+```{r echo=FALSE, cache=TRUE, results='asis', warning=FALSE}
+rpart.plot(train_rpart$finalModel)
+```
+
+Finally, as a more complex variant of classification trees, we are going to try to train a random forest algorithm. Random forests improves prediction performance by averaging multiple classification trees. In order to ensure the randomness that the algorithm needs, those multiple classification trees are generated using: random samples (bootstrap), a randomly selected set of predictors between all our available predictors and/or different node sizes.
+
+The main disadvantage of these algorithms are: we lose interpretability compared to simple classification tress and that computational requirements to train the algorithm are quite higher compared to other simple methods like classification trees, knn or logistic regression.
+
+We are using *caret* package for parameter optimization combined with one of the particular implementations of the random forest algorithm called *Rborist*. We are setting the tunning parameters *predFixed* (number of predictors to use for each invididual random tree) to 4 or 5 and *minNode* (minimal node size) between 30 and 80. 
+
+```{r echo=FALSE, cache=TRUE, warning=FALSE}
+#IT TAKES A LOT OF TIME TO EXECUTE, SO CODE HAS BEEN COMMENTED AFTER EXECUTION
+#Using the whole population of the train set
+#fit_rf<- train(success_factor~period_scaled+ratio_scaled+words_scaled+ucat_success_rate+cty_success_rate,
+                  #method = "Rborist",
+                  #tuneGrid = data.frame(predFixed = c(4,5), minNode = c(30,80)),
+                  #data = ks_train)
+
+#y_hat_rf = predict(fit_rf,newdata=ks_test)
+#mean(ks_test$success_factor==y_hat_rf)
+#0.6640649
+```
+
+As a final result, we get an accuracy for our test dataset of 0.6640 (66.4%).
+
+\pagebreak
+
+# Results
+
+After analyzing the accuracy of the predictions for our test dataset applying different models (logistic regression, k-nearest neighbours, classification trees) we can now compare best accuracy results for predicting if the projects in the test dataset are going to be successful or not. 
+
+We are going to represent the best accuracy obtained for each method:
+
+```{r echo=FALSE, cache=TRUE, results='asis'}
+results_summary <- tibble(Algorithm = "Logictic regression", Accuracy = ac1)
+results_summary <- bind_rows(results_summary,tibble(Algorithm="K-Nearest Neighbours",Accuracy = ac6))
+results_summary <- bind_rows(results_summary,tibble(Algorithm="Classification Tree",Accuracy = tree_acc))
+results_summary %>% knitr::kable(caption="Prediction accuracy for different methods and test dataset")
+```
+
+We have found that the one with better accuracy is the classification tree algorithm with *cp* (complexity parameter) equals to 0.001.
+
+Once we have selected the best algorithm for our problem, we are going to calculate the final performance of the model using our validation dataset.
+The validation dataset was created at the beginning and has not been included in any part of our analysis or algorithm training, hence is completely independent of our model.
+
+First step will consist on applying on validation dataset the same transformations that we did for training and cross-validation datasets: create unique category and success rate for category, calculate goal per day ratio and scale it, etc...
+
+```{r echo=FALSE, cache=TRUE, warning=FALSE}
+ks_validation <- ks_validation %>% mutate(unique_cat=str_c(main_category,category,sep="|"))
+ks_validation <- ks_validation %>% mutate(deadline=as.Date(deadline),launched=as.Date(launched),days_period=difftime(deadline, launched, units = "day"))
+ks_validation <- ks_validation %>% mutate(goal_day_ratio=usd_goal_real/as.integer(days_period))
+ks_validation$country[ks_validation$country == "N,0\""] <- "UN"
+ks_validation <- ks_validation %>% mutate(title_words=str_count(name," ")+1)
+ks_validation <- ks_validation %>% mutate(days_period=as.integer(days_period))
+ks_validation <- ks_validation %>% left_join(unique_cat_summary,by="unique_cat")
+ks_validation <- ks_validation %>% left_join(ks_country,by="country")
+ks_validation <- ks_validation %>% mutate(period_scaled=as.integer(days_period)/max_period)
+ks_validation <- ks_validation %>% mutate(words_scaled=title_words/max_words)
+ks_validation <- ks_validation %>% mutate(ratio_scaled=goal_day_ratio/5000)
+ks_validation$ratio_scaled[ks_validation $ratio_scaled>1] <- 1
+ks_validation  <- ks_validation %>% mutate(success=as.numeric(state=='successful'))
+ks_validation <- ks_validation %>% mutate(success_factor=as.factor(success))
+
+validation_rpart <- predict(train_rpart,newdata = ks_validation, type = "raw")
+final_acc <- mean(ks_validation$success_factor==validation_rpart)
+#Final Accuracy = 0.6740
+```
+
+After doing the corresponding transformations and applying the trained classification tree model to our validation dataset, we get a final accuracy of 0.6740 (67.4%).
+
+As we can observe, the accuracy performance, 67.4%, is quite good (we are going to predict correctly for 2 of each 3 campaigns) but not as high as the performance we can get for other simplier problems.
+
+This is due to the nature of our problem, where:
+
+* there is a high dependency of human preferences in liking or disliking a project (and the human being is quite unpredictable) 
+
+* there is a lack of additional features that could be important for predicting the future success of a project like author (previously succesful authors have more probabilities of success for new projects), rewards (authors give rewards to sponsors if they commit to donate certain amounts of money), etc...
+
+In fact, as we calculated at the beginning the global average of succesful projects (40.4%), we may be tempted to predict the success of a campaing just randomly guessing (with probabilites of 40.4-59.6) and think that the performance is going to be quite similar to our trained model. 
+
+```{r echo=FALSE, cache=TRUE, warning=FALSE}
+set.seed(5, sample.kind="Rounding")
+y_random <- sample(c(0,1),length(ks_validation$success_factor),replace=TRUE,prob=c(1-mean_success,mean_success))
+```
+
+We are going to compare the accuracy for both of them and additionally, as we know, overall accuracy is not the only way of measuring different algorithms. So We will take into account as well:
+
+* sensitivity/recall $\rightarrow$ proportion of actual positives (successful campaigns) correctly identified (true positive / true positive + false negative)
+
+* specifity $\rightarrow$ proportion of actual negatives (failed campaigns) correctly identified (true negative / true negative + false positive)
+
+* precision $\rightarrow$ proportion of positives (succesful campaigns) that were correctly identified as succesful (true positive / true positive + false positive)
+
+* F1-score $\rightarrow$ harmonic average of precission and recall. It is used as a simple number summary to evaluate the algorithm. The formula to calculate it is quite simple:
+$$F_{1} = 2 * \frac{precision * recall}{precision + recall} $$
+
+```{r echo=FALSE, cache=TRUE, warning=FALSE, results='asis'}
+#Confusion Matrix, Sensitivity, Specificity and F1 score for our model
+f1_clasTree <- F_meas(data=validation_rpart,reference=ks_validation$success_factor)
+#0.747158
+spec_clasTree <- specificity(data=validation_rpart,reference=ks_validation$success_factor)
+#0.476709
+sens_clasTree <- sensitivity(data=validation_rpart,reference=ks_validation$success_factor)
+#0.807809
+confMat_clasTree <- confusionMatrix(data=validation_rpart,reference=ks_validation$success_factor)
+
+#Confusion Matrix, Sensitivity, Specificity and F1 score for random guessing
+accur_guess <- mean(ks_validation$success_factor==as.factor(y_random))
+#0.5220
+f1_guess <- F_meas(data=as.factor(y_random),reference=ks_validation$success_factor)
+#0.60001
+spec_guess <- specificity(data=as.factor(y_random),reference=ks_validation$success_factor)
+#0.405195
+sens_guess <- sensitivity(data=as.factor(y_random),reference=ks_validation$success_factor)
+#0.6013
+confMat_guess <- confusionMatrix(data=as.factor(y_random),reference=ks_validation$success_factor)
+
+#Compare results in a table
+metrics_summary <- tibble(Metric = "Accuracy", 'Guessing with 40-60 prob' = accur_guess,  'Trained Classification Tree' = final_acc)
+metrics_summary <- bind_rows(metrics_summary,tibble(Metric = "Sensitivity", 'Guessing with 40-60 prob' = sens_guess,  'Trained Classification Tree' = sens_clasTree))
+metrics_summary <- bind_rows(metrics_summary,tibble(Metric = "Specificity", 'Guessing with 40-60 prob' = spec_guess,  'Trained Classification Tree' = spec_clasTree))
+metrics_summary <- bind_rows(metrics_summary,tibble(Metric = "F1 Score", 'Guessing with 40-60 prob' = f1_guess,  'Trained Classification Tree' = f1_clasTree))
+metrics_summary %>% knitr::kable(caption="Comparative metrics between just guessing and our trained algorithm ")
+
+```
+
+*NOTE: For calculating sensitivity, specificity and f1-score, the failed campaign factor is used as positive value. Caret package automatically uses it as positive value because is the most numerous. In any case, it really doesn't matter as it doesn't change the validity of our metrics.*
+
+As we can observe in the table, is not only the accuracy which is much better in our predictions done with the trained algorithm, compared to guessing with a 60-40 probability, but also sensitivity, specificity and f1-score.
+
+\pagebreak
+
+# Conclusion
+In this report, we have studied the probability of success for any Kickstarter campaign based on historical data provided since its inception in 2008 until January 2018.
+
+We have demonstrated how different features like the money/goal we want to raise or the duration of the crowdfunding campaign can increase or decrease the probabilities of success for our project.
+
+We have been able to provide a model that may help us to predict if our Kickstarter campaign will be successful or not with an accuracy of 67.4% (2 of each 3 will be predicted correctly).
+
+It's important to remark that in this analysis, our purpose was always to predict the probability of success **before** launching our campaing. 
+That way, only features that we can choose as authors and we have historical success rate information availabe for them have been included in our model: goal to raise, title and duration of the campaign and country of origin.
+
+We could probably achieve a higher accuracy including other features that are available (or can be deduced) from the dataset, i.e., success rate for projects on same month/year. 
+
+However, we are not considering them for our model because that information wouldn't be available when we launch our project. I.e. if we launch our project on September 2020, we are not going to have that information available until all the projects launched at same time have finished.
+
+Additionally, as part of a possible future work, we can study if this accuracy performance would be improved collecting and using additional data that is not represented in the original Kaggle dataset and we think could have some impact:
+
+* author and previous campaigns success rate $\rightarrow$ it is probable that authors that had previously promoted succesful campaigns have more chances of being succesful again
+
+* rewards for the campaign and minimum contribution in order to get it $\rightarrow$ it is probable that campaigns where rewards require a lower minimum donation have more chances on being succesful
+
+* marketing campaigns (money spent on marketing) $\rightarrow$ the chances for our campaign to be successful are going to be higher if we have hired some marketing as social media influencers, Facebook & Instagram ads, etc...
+
+
+# References
